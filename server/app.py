@@ -14,37 +14,57 @@ migrate = Migrate(app, db)
 
 db.init_app(app)
 
-# GET /messages: returns an array of all messages as JSON, ordered by created_at in ascending order.
-@app.route('/messages', methods=['GET'])
-def get_messages():
-    messages = Message.query.order_by(Message.created_at).all()
-    return jsonify([message.to_dict() for message in messages])  # Serializing messages to JSON
+@app.route('/messages', methods=['GET', 'POST'])
+def messages():
+    if request.method == 'GET':
+        messages = Message.query.order_by('created_at').all()
 
-# POST /messages: creates a new message with a body and username from params
-@app.route('/messages', methods=['POST'])
-def create_message():
-    data = request.get_json()  # Getting JSON data from request
-    new_message = Message(body=data['body'], username=data['username'])
-    db.session.add(new_message)
-    db.session.commit()
-    return make_response(jsonify(new_message.to_dict()), 201)  # Returning the newly created message
+        response = make_response(
+            jsonify([message.to_dict() for message in messages]),
+            200,
+        )
+    
+    elif request.method == 'POST':
+        data = request.get_json()
+        message = Message(
+            body=data['body'],
+            username=data['username']
+        )
 
-# PATCH /messages/<int:id>: updates the body of the message using params
-@app.route('/messages/<int:id>', methods=['PATCH'])
-def update_message(id):
-    message = Message.query.get_or_404(id)  # Getting message or return 404 if not found
-    data = request.get_json()  # Getting JSON data from request
-    message.body = data.get('body', message.body)  
-    db.session.commit()
-    return jsonify(message.to_dict())  # Returning the updated message
+        db.session.add(message)
+        db.session.commit()
 
-# DELETE /messages/<int:id>: deletes the message from the database
-@app.route('/messages/<int:id>', methods=['DELETE'])
-def delete_message(id):
-    message = Message.query.get_or_404(id)  # Getting message or return 404 if not found
-    db.session.delete(message)
-    db.session.commit()
-    return make_response('', 204)  
+        response = make_response(
+            jsonify(message.to_dict()),
+            201,
+        )
 
-if __name__ == '__main__':
-    app.run(port=5555)
+    return response
+
+@app.route('/messages/<int:id>', methods=['PATCH', 'DELETE'])
+def messages_by_id(id):
+    message = Message.query.filter_by(id=id).first()
+
+    if request.method == 'PATCH':
+        data = request.get_json()
+        for attr in data:
+            setattr(message, attr, data[attr])
+            
+        db.session.add(message)
+        db.session.commit()
+
+        response = make_response(
+            jsonify(message.to_dict()),
+            200,
+        )
+
+    elif request.method == 'DELETE':
+        db.session.delete(message)
+        db.session.commit()
+
+        response = make_response(
+            jsonify({'deleted': True}),
+            200,
+        )
+
+    return response
